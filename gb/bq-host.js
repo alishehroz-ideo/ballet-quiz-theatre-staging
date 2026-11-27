@@ -1,8 +1,9 @@
 'use strict';
 /* バレエ・クイズシアター: the GameBull Stage Mode API for the client's page.
  *
- * Their game has no GameBull code and no lives (600 questions in 120 acts of 5, played in their order, progress in this
- * browser). One GameBull stage = one of their acts (第N幕): their own unit, with its own clear screen (「第N幕 クリア！」).
+ * Their game has no GameBull code and no lives (600 questions played in their order, in acts of 5, progress in this
+ * browser). One GameBull stage = one of their questions (第N問, their own count: 「第N問 / 600」), so GameBull shows the
+ * 600 their game is about (build 3; build 1-2 used one stage per act, 120 stages, which QA read as "120 levels").
  * This file is the API client the other Stage Mode games use (gamebull-whitelabel ADR-0086, contracts/stage-mode.ts; the
  * Donut Tower, Kurozumi, PHOTO JIGSAW and PONTE ports); gb hooks (appended to their main.js) put it on their page:
  *
@@ -27,7 +28,7 @@
  */
 (function () {
   const ENV = window.BQ_GB || {};
-  const TOTAL = 120; // their 600 questions / 5 per act (checked at build time)
+  const TOTAL = 600; // their 600 questions (checked at build time)
   const log = (...a) => console.log('[BQ-GB]', ...a);
 
   const q = new URLSearchParams(location.search);
@@ -42,13 +43,13 @@
   const KEY = 'bq-gb:v1:' + tenant + ':' + gameId + ':' + player;
 
   class StageError extends Error { constructor(code, message) { super(message); this.name = 'StageError'; this.code = code; } }
-  // Server codes -> Japanese (the wording of the other Stage Mode screens, with their 幕 for a stage).
+  // Server codes -> Japanese (the wording of the other Stage Mode screens, with their 問 for a stage).
   const MESSAGES = {
     'play.no_lives': 'ライフがありません。GameBullでライフをご確認ください。',
     'stage.daily_limit_reached': '本日の挑戦回数の上限に達しました。進行状況はGameBullに保存されています。',
-    'stage.stage_not_playable': 'この幕はまだ遊べません。前の幕をクリアすると遊べるようになります。',
-    'stage.all_cleared': '全120幕（600問）クリア済みです。特典はGameBullでご確認ください。',
-    'stage.stage_required': '幕の番号の送信に問題があります。開発者へお問い合わせください。',
+    'stage.stage_not_playable': 'この問題はまだ遊べません。前の問題に正解すると遊べるようになります。',
+    'stage.all_cleared': '全600問クリア済みです。特典はGameBullでご確認ください。',
+    'stage.stage_required': '問題番号の送信に問題があります。開発者へお問い合わせください。',
     'stage.play_token_required': '参加情報を確認できません。もう一度お試しください。',
     'play.session_token_expired': '参加の有効期限が切れました。GameBullのゲーム画面から開き直してください。',
     'play.session_token_invalid': 'GameBullへの接続に失敗しました。GameBullのゲーム画面から開き直してください。',
@@ -98,7 +99,7 @@
     // stageMode is sent only for a "Play Stage Mode" launch (boot token mode STAGE_CLEAR); "Game Start" gets null.
     if (!m) throw fail('stage_mode_required', 'このゲームはステージモードで遊べます。GameBullのゲーム画面の「Play Stage Mode」から開いてください。');
     const h = m.highestCleared;
-    if (m.totalStages !== TOTAL) throw fail('bad_context', 'GameBullのステージ数が120（全600問・5問ごとに1幕）ではありません（' + m.totalStages + '）。管理者に確認してください。');
+    if (m.totalStages !== TOTAL) throw fail('bad_context', 'GameBullのステージ数が600（全600問）ではありません（' + m.totalStages + '）。管理者に確認してください。');
     if (!Number.isInteger(h) || h < 0 || h > TOTAL || (h >= TOTAL ? m.nextStage !== null : m.nextStage !== h + 1) || !(m.maxAttemptSeconds > 0))
       throw fail('bad_context', 'ステージ情報がゲームと一致しません。管理者に確認してください。');
     const first = !ctx;
@@ -133,7 +134,7 @@
     for (const a of Object.values(store.attempts)) {
       if (!a.clearBody || a.result) continue;
       const r = await sendClear(a);
-      if (!r.ok && !r.final) throw fail(r.code || 'clear_pending', '第' + a.stage + '幕のクリア記録をGameBullに送信できませんでした。通信を確認して、もう一度お試しください。');
+      if (!r.ok && !r.final) throw fail(r.code || 'clear_pending', '第' + a.stage + '問のクリア記録をGameBullに送信できませんでした。通信を確認して、もう一度お試しください。');
     }
   }
 
@@ -155,7 +156,7 @@
     const replay = m.nextStage === null || stage < m.nextStage;
     if (!replay && stage > m.nextStage) throw fail('stage.stage_not_playable');
     if (replay && !m.freeReplays) throw fail('replay_off', m.nextStage === null ? MESSAGES['stage.all_cleared']
-      : '第' + stage + '幕はクリア済みです。GameBullのステージモードでは、クリア済みの幕は遊べません。続きの第' + m.nextStage + '幕へ進んでください。');
+      : '第' + stage + '問はクリア済みです。GameBullのステージモードでは、クリア済みの問題は遊べません。続きの第' + m.nextStage + '問へ進んでください。');
 
     let data;
     try { data = await request('/play/plays', { method: 'POST', body: { bootToken: token, stage } }); }
